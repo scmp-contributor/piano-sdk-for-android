@@ -197,8 +197,8 @@ class Composer internal constructor(
          */
         @JvmStatic
         @Suppress("unused") // Public API.
-        fun init(context: Context, aid: String, sandbox: Boolean) =
-            init(context, aid, if (sandbox) BASE_URL_SANDBOX else null)
+        fun init(context: Context, aid: String, sandbox: Boolean, interceptor: Interceptor? = null) =
+            init(context, aid, if (sandbox) BASE_URL_SANDBOX else null, interceptor)
 
         @JvmStatic
         @Suppress("unused") // Public API.
