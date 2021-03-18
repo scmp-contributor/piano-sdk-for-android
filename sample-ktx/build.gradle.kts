@@ -71,6 +71,7 @@ dependencies {
     implementation(Libs.timber)
     implementation(Libs.moshi)
     implementation(Libs.prefsKtx)
+    implementation(Libs.okhttp)
 
     implementation(project(":composer"))
     implementation(project(":composer-show-template"))
