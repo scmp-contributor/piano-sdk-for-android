@@ -6,6 +6,8 @@ import androidx.annotation.NonNull;
 
 import com.squareup.moshi.Moshi;
 
+import io.piano.android.id.PianoIdTokenJsonAdapter;
+
 public class SimpleDependenciesProvider {
     private static SimpleDependenciesProvider instance;
 
