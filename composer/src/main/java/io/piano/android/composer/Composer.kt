@@ -10,6 +10,7 @@ import io.piano.android.composer.model.ExperienceResponse
 import io.piano.android.composer.model.events.EventType
 import io.piano.android.composer.model.events.ShowTemplate
 import okhttp3.HttpUrl
+import okhttp3.Interceptor
 import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
@@ -184,8 +185,8 @@ class Composer internal constructor(
         @JvmStatic
         @JvmOverloads
         @Suppress("unused") // Public API.
-        fun init(context: Context, aid: String, endpoint: String? = null) {
-            DependenciesProvider.init(context, aid, endpoint)
+        fun init(context: Context, aid: String, endpoint: String? = null, interceptor: Interceptor? = null) {
+            DependenciesProvider.init(context, aid, endpoint, interceptor)
         }
 
         /**
