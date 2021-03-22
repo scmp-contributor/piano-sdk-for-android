@@ -5,9 +5,9 @@ plugins {
 include(
     ":composer",
     ":composer-show-template",
-    ":id:id",
-    ":id:id-oauth-facebook",
-    "id:id-oauth-google",
+    ":piano-id:id",
+    ":piano-id:id-oauth-facebook",
+    "piano-id:id-oauth-google",
     ":sample",
     ":sample-ktx"
 )

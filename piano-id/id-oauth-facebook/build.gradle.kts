@@ -26,7 +26,7 @@ android {
 dependencies {
     implementation(Libs.appcompat)
     api(Libs.facebookLogin)
-    api(project(":id:id"))
+    api(project(":piano-id:id"))
 }
 
 kotlin {

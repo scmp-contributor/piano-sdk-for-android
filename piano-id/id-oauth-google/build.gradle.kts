@@ -26,7 +26,7 @@ android {
 dependencies {
     implementation(Libs.appcompat)
     implementation(Libs.googleAuth)
-    api(project(":id:id"))
+    api(project(":piano-id:id"))
 }
 
 kotlin {
