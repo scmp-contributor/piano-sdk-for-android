@@ -15,7 +15,7 @@ object Versions {
     //Plugins
     const val versionsPlugin = "0.36.0"
     const val androidToolsPlugin = "4.0.1"
-    const val ktlintPlugin = "9.3.0"//"9.4.1"
+    const val ktlintPlugin = "9.4.1"
     const val dokkaPlugin = "1.4.10.2"
 
     // AndroidX libraries
