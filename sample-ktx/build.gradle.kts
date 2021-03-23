@@ -75,7 +75,7 @@ dependencies {
 
     implementation(project(":composer"))
     implementation(project(":composer-show-template"))
-    implementation(project(":piano-id:id"))
-    implementation(project(":piano-id:id-oauth-google"))
-    implementation(project(":piano-id:id-oauth-facebook"))
+    implementation(project(":id:id"))
+    implementation(project(":id:id-oauth-google"))
+    implementation(project(":id:id-oauth-facebook"))
 }
