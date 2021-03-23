@@ -4,4 +4,4 @@ build
 debug
 local.properties
 *.iml
-piano.properties
+#piano.properties

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import androidx.annotation.RestrictTo
 import com.squareup.moshi.Moshi
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -15,13 +16,14 @@ import java.util.concurrent.TimeUnit
 internal class DependenciesProvider private constructor(
     context: Context,
     aid: String,
-    endpoint: String?
+    endpoint: String?,
+    interceptor: Interceptor? = null
 ) {
     private val prefsStorage = PrefsStorage(context)
     private val userAgent = "Piano composer SDK (Android ${Build.VERSION.RELEASE} (Build ${Build.ID}); " +
-        "${context.applicationContext.deviceType()} ${Build.MANUFACTURER}/${Build.MODEL})"
+            "${context.applicationContext.deviceType()} ${Build.MANUFACTURER}/${Build.MODEL})"
 
-    private val okHttpClient = OkHttpClient.Builder()
+    private val okHttpClientBuilder = OkHttpClient.Builder()
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(UserAgentInterceptor(userAgent))
@@ -32,7 +34,13 @@ internal class DependenciesProvider private constructor(
                 else HttpLoggingInterceptor.Level.NONE
             )
         )
-        .build()
+
+    private val okHttpClient = interceptor?.let {
+        okHttpClientBuilder
+            .addInterceptor(interceptor)
+            .build()
+    } ?: okHttpClientBuilder.build()
+
     private val moshi = Moshi.Builder()
         .add(CustomParametersJsonAdapter.FACTORY)
         .add(EventJsonAdapterFactory())
@@ -61,11 +69,11 @@ internal class DependenciesProvider private constructor(
         private var instance: DependenciesProvider? = null
 
         @JvmStatic
-        internal fun init(context: Context, aid: String, endpoint: String?) {
+        internal fun init(context: Context, aid: String, endpoint: String?, interceptor: Interceptor? = null) {
             if (instance == null) {
                 synchronized(this) {
                     if (instance == null) {
-                        instance = DependenciesProvider(context, aid, endpoint)
+                        instance = DependenciesProvider(context, aid, endpoint, interceptor)
                     }
                 }
             }
