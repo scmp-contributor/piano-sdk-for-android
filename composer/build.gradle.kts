@@ -1,40 +1,15 @@
-plugins {
-    id(Plugins.androidLibrary)
-    id(Plugins.kotlinAndroid)
-    kotlin("kapt")
-    id(Plugins.dokka)
-    id(Plugins.ktlint)
-}
+import io.piano.android.dependencies.Libs
 
-group = rootProject.group
-version = rootProject.version
+plugins {
+    id("com.android.library")
+    id("common-android-config")
+    kotlin("kapt")
+}
 
 android {
-    buildToolsVersion = Config.androidBuildTools
-    compileSdkVersion(Config.androidCompileSdk)
     defaultConfig {
-        minSdkVersion(Config.androidMinSdk)
-        targetSdkVersion(Config.androidTargetSdk)
-        versionName = version.toString()
+        buildConfigField("String", "SDK_VERSION", """"$version"""")
     }
-
-    compileOptions {
-        sourceCompatibility = Config.compileSourceVersion
-        targetCompatibility = Config.compileTargetVersion
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
-        freeCompilerArgs = listOf("-Xjvm-default=enable")
-    }
-}
-
-kotlin {
-    explicitApi()
-}
-
-ktlint {
-    android.set(true)
 }
 
 dependencies {
@@ -44,6 +19,7 @@ dependencies {
     implementation(Libs.moshi)
     kapt(Libs.moshiCodegen)
     implementation(Libs.annotations)
+    implementation(Libs.timber)
 
     testImplementation(Libs.kotlinJunit)
     testImplementation(Libs.mockitoKotlin)
@@ -51,11 +27,3 @@ dependencies {
     testImplementation(Libs.junit)
     testImplementation(Libs.okhttpMockServer)
 }
-
-val javadocJar by tasks.creating(Jar::class) {
-    dependsOn(tasks.dokkaJavadoc)
-    archiveClassifier.set("javadoc")
-    from(tasks.dokkaJavadoc.get().outputDirectory.get())
-}
-
-project.applyBintrayUpload(javadocJar)

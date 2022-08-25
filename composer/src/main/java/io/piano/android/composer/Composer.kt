@@ -18,14 +18,37 @@ import retrofit2.HttpException
 import retrofit2.Response
 
 class Composer internal constructor(
-    private val api: Api,
+    private val composerApi: ComposerApi,
+    private val generalApi: GeneralApi,
     private val httpHelper: HttpHelper,
     private val prefsStorage: PrefsStorage,
     private val aid: String,
-    private val customEndpoint: String? = null
+    private val endpoint: Endpoint
 ) {
+    private val templateUrl by lazy {
+        endpoint.apiHost.newBuilder().addPathSegments(URL_TEMPLATE).build()
+    }
+    private var browserIdProvider: () -> String? = { null }
     private var userToken: String? = null
     private var gaClientId: String? = null
+    private val experienceInterceptors = mutableListOf<ExperienceInterceptor>(httpHelper)
+
+    init {
+        require(aid.isNotEmpty()) {
+            "AID can't be empty"
+        }
+    }
+
+    /**
+     * Gets Composer's user access token for Edge CDN
+     * @return Access token for Edge CDN
+     */
+    val accessToken: String
+        get() = prefsStorage.tpAccessCookie
+
+    fun addExperienceInterceptor(interceptor: ExperienceInterceptor) = experienceInterceptors.add(interceptor)
+
+    fun browserIdProvider(browserIdProvider: () -> String?) = apply { this.browserIdProvider = browserIdProvider }
 
     /**
      * Sets user token, which will be sent at each experience request
@@ -57,44 +80,37 @@ class Composer internal constructor(
         eventTypeListeners: Collection<EventTypeListener<out EventType>>,
         exceptionListener: ExceptionListener
     ) {
-        val url = (customEndpoint ?: BASE_URL_EXPERIENCE) + URL_EXPERIENCE_EXECUTE
-        api.getExperience(url, httpHelper.convertExperienceRequest(request, aid, userToken))
-            .enqueue(
-                object : Callback<Data<ExperienceResponse>> {
-                    override fun onResponse(
-                        call: Call<Data<ExperienceResponse>>,
-                        response: Response<Data<ExperienceResponse>>
-                    ) {
-                        runCatching {
-                            with(response.bodyOrThrow()) {
-                                if (errors.isEmpty()) {
-                                    // Don't process any custom logic if there's no listeners
-                                    if (eventTypeListeners.isNotEmpty())
-                                        processExperienceResponse(
-                                            request,
-                                            data,
-                                            eventTypeListeners,
-                                            exceptionListener
-                                        )
-                                } else {
-                                    exceptionListener.onException(
-                                        ComposerException(
-                                            errors.joinToString(
-                                                separator = "\n"
-                                            ) { it.message }
-                                        )
-                                    )
-                                }
+        experienceInterceptors.forEach { it.beforeExecute(request) }
+        composerApi.getExperience(
+            httpHelper.convertExperienceRequest(request, aid, browserIdProvider, userToken)
+        ).enqueue(
+            object : Callback<Data<ExperienceResponse>> {
+                override fun onResponse(
+                    call: Call<Data<ExperienceResponse>>,
+                    response: Response<Data<ExperienceResponse>>
+                ) {
+                    runCatching {
+                        with(response.bodyOrThrow()) {
+                            if (errors.isNotEmpty()) {
+                                throw ComposerException(errors.joinToString(separator = "\n") { it.message })
                             }
-                        }.onFailure {
-                            exceptionListener.onException(it.toComposerException())
-                        }
-                    }
 
-                    override fun onFailure(call: Call<Data<ExperienceResponse>>, t: Throwable) =
-                        exceptionListener.onException(t.toComposerException())
+                            processExperienceResponse(
+                                request,
+                                data,
+                                eventTypeListeners,
+                                exceptionListener
+                            )
+                        }
+                    }.onFailure {
+                        exceptionListener.onException(it.toComposerException())
+                    }
                 }
-            )
+
+                override fun onFailure(call: Call<Data<ExperienceResponse>>, t: Throwable) =
+                    exceptionListener.onException(t.toComposerException())
+            }
+        )
     }
 
     /**
@@ -104,16 +120,28 @@ class Composer internal constructor(
      */
     @Suppress("unused") // Public API.
     fun trackExternalEvent(trackingId: String) {
-        val url = (customEndpoint ?: BASE_URL_BUY) + URL_TRACK_EXTERNAL_EVENT
-        api.trackExternalEvent(url, httpHelper.buildEventTracking(trackingId))
-            .enqueue(
-                object : Callback<ResponseBody> {
-                    override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {}
-
-                    override fun onFailure(call: Call<ResponseBody>, t: Throwable) {}
-                }
-            )
+        generalApi.trackExternalEvent(httpHelper.buildEventTracking(trackingId)).enqueue(emptyCallback)
     }
+
+    /**
+     * Tracks custom form impression by name
+     *
+     * @param customFormName Custom form name
+     */
+    @Suppress("unused") // Public API.
+    fun trackCustomFormImpression(customFormName: String, trackingId: String) =
+        generalApi.customFormImpression(httpHelper.buildCustomFormTracking(aid, customFormName, trackingId, userToken))
+            .enqueue(emptyCallback)
+
+    /**
+     * Tracks custom form submission by name
+     *
+     * @param customFormName Custom form name
+     */
+    @Suppress("unused") // Public API.
+    fun trackCustomFormSubmission(customFormName: String, trackingId: String) =
+        generalApi.customFormSubmission(httpHelper.buildCustomFormTracking(aid, customFormName, trackingId, userToken))
+            .enqueue(emptyCallback)
 
     /**
      * Clears stored data, like cookies, visit data
@@ -127,7 +155,12 @@ class Composer internal constructor(
         eventTypeListeners: Collection<EventTypeListener<out EventType>>,
         exceptionListener: ExceptionListener
     ) {
-        httpHelper.processExperienceResponse(response)
+        experienceInterceptors.forEach { it.afterExecute(request, response) }
+
+        // Don't process any custom logic if there's no listeners
+        if (eventTypeListeners.isEmpty())
+            return
+
         response.result.events.forEach {
             val event = it.preprocess(request)
             eventTypeListeners.forEach { listener ->
@@ -146,19 +179,18 @@ class Composer internal constructor(
     @Suppress("NOTHING_TO_INLINE")
     private inline fun Event<EventType>.preprocess(request: ExperienceRequest): Event<EventType> {
         val data = if (eventData is ShowTemplate) {
-            HttpUrl.parse((customEndpoint ?: BASE_URL_BUY) + URL_TEMPLATE)?.newBuilder()?.let {
-                @Suppress("UNCHECKED_CAST")
-                httpHelper.buildShowTemplateParameters(
-                    this as Event<ShowTemplate>,
-                    request,
-                    aid,
-                    userToken,
-                    gaClientId
-                ).forEach { (key, value) ->
-                    it.addQueryParameter(key, value)
-                }
-                eventData.copy(url = it.build().toString())
-            } ?: eventData
+            val builder = templateUrl.newBuilder()
+            @Suppress("UNCHECKED_CAST")
+            httpHelper.buildShowTemplateParameters(
+                this as Event<ShowTemplate>,
+                request,
+                aid,
+                userToken,
+                gaClientId
+            ).forEach { (key, value) ->
+                builder.addQueryParameter(key, value)
+            }
+            eventData.copy(url = builder.build().toString())
         } else eventData
         return copy(
             eventData = data
@@ -175,30 +207,74 @@ class Composer internal constructor(
     private inline fun Throwable.toComposerException() =
         if (this is ComposerException) this else ComposerException(this)
 
+    class Endpoint(
+        composerHost: String,
+        apiHost: String
+    ) {
+        internal val composerHost: HttpUrl = HttpUrl.get(composerHost)
+        internal val apiHost: HttpUrl = HttpUrl.get(apiHost)
+
+        companion object {
+            private const val COMPOSER_SANDBOX_URL = "https://c2.sandbox.piano.io"
+            private const val API_SANDBOX_URL = "https://sandbox.piano.io"
+            private const val COMPOSER_DEFAULT_URL = "https://c2.piano.io"
+            private const val API_DEFAULT_URL = "https://buy.piano.io"
+            private const val COMPOSER_AU_URL = "https://c2-au.piano.io"
+            private const val API_AU_URL = "https://buy-au.piano.io"
+            private const val COMPOSER_AP_URL = "https://c2-ap.piano.io"
+            private const val API_AP_URL = "https://buy-ap.piano.io"
+            private const val COMPOSER_EU_URL = "https://c2-eu.piano.io"
+            private const val API_EU_URL = "https://buy-eu.piano.io"
+
+            /**
+             * Sandbox endpoint
+             */
+            @JvmField
+            @Suppress("unused") // Public API.
+            val SANDBOX = Endpoint(COMPOSER_SANDBOX_URL, API_SANDBOX_URL)
+
+            /**
+             * Default production endpoint
+             */
+            @JvmField
+            @Suppress("unused") // Public API.
+            val PRODUCTION = Endpoint(COMPOSER_DEFAULT_URL, API_DEFAULT_URL)
+
+            /**
+             * Australia production endpoint
+             */
+            @JvmField
+            @Suppress("unused") // Public API.
+            val PRODUCTION_AUSTRALIA = Endpoint(COMPOSER_AU_URL, API_AU_URL)
+
+            /**
+             * Asia/Pacific production endpoint
+             */
+            @JvmField
+            @Suppress("unused") // Public API.
+            val PRODUCTION_ASIA_PACIFIC = Endpoint(COMPOSER_AP_URL, API_AP_URL)
+
+            /**
+             * Europe production endpoint
+             */
+            @JvmField
+            @Suppress("unused") // Public API.
+            val PRODUCTION_EUROPE = Endpoint(COMPOSER_EU_URL, API_EU_URL)
+        }
+    }
+
     companion object {
         /**
          * Initialize Composer
          * @param context Activity or Application context
          * @param aid Your AID
-         * @param endpoint Custom API endpoint, null for use "production"
+         * @param endpoint Custom API endpoint, see predefined in {@link Composer.Endpoint}
          */
         @JvmStatic
         @JvmOverloads
         @Suppress("unused") // Public API.
-        fun init(context: Context, aid: String, endpoint: String? = null, interceptor: Interceptor? = null) {
-            DependenciesProvider.init(context, aid, endpoint, interceptor)
-        }
-
-        /**
-         * Initialize Composer
-         * @param context Activity or Application context
-         * @param aid Your AID
-         * @param sandbox Use sandbox environment if true, production otherwise
-         */
-        @JvmStatic
-        @Suppress("unused") // Public API.
-        fun init(context: Context, aid: String, sandbox: Boolean, interceptor: Interceptor? = null) =
-            init(context, aid, if (sandbox) BASE_URL_SANDBOX else null, interceptor)
+        fun init(context: Context, aid: String, endpoint: Endpoint = Endpoint.PRODUCTION) =
+            DependenciesProvider.init(context, aid, endpoint)
 
         @JvmStatic
         @Suppress("unused") // Public API.
@@ -213,11 +289,10 @@ class Composer internal constructor(
         @Suppress("unused") // Public API.
         const val USER_PROVIDER_JANRAIN = "janrain"
 
-        internal const val BASE_URL_SANDBOX = "https://sandbox.tinypass.com"
-        internal const val BASE_URL_EXPERIENCE = "https://experience.tinypass.com"
-        internal const val BASE_URL_BUY = "https://buy.tinypass.com"
-        internal const val URL_EXPERIENCE_EXECUTE = "/xbuilder/experience/executeMobile"
-        internal const val URL_TRACK_EXTERNAL_EVENT = "/api/v3/conversion/logAutoMicroConversion"
-        internal const val URL_TEMPLATE = "/checkout/template/show"
+        private const val URL_TEMPLATE = "checkout/template/show"
+        private val emptyCallback = object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {}
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {}
+        }
     }
 }

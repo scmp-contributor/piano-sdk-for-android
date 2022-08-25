@@ -1,11 +1,11 @@
 package io.piano.android.id
 
-import android.content.Intent
 import android.net.Uri
 import androidx.annotation.RestrictTo
 import androidx.annotation.VisibleForTesting
 import com.squareup.moshi.Moshi
 import io.piano.android.id.models.PianoIdToken
+import io.piano.android.id.models.PianoUserProfile
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -36,14 +36,15 @@ class PianoId {
                 val okHttpClient = OkHttpClient.Builder()
                     .addInterceptor(
                         HttpLoggingInterceptor().setLevel(
-                            if (BuildConfig.DEBUG)
+                            if (BuildConfig.DEBUG || isLogHttpSet())
                                 HttpLoggingInterceptor.Level.BODY
                             else HttpLoggingInterceptor.Level.NONE
                         )
                     )
                     .build()
                 val moshi = Moshi.Builder()
-                    .add(PianoIdTokenJsonAdapter.FACTORY)
+                    .add(PianoIdJsonAdapterFactory())
+                    .add(UnixTimeDateAdapter)
                     .build()
                 val retrofit = Retrofit.Builder()
                     .client(okHttpClient)
@@ -93,18 +94,16 @@ class PianoId {
                 ?: callback(Result.failure(IllegalStateException(NOT_INITIALIZED_MSG)))
         }
 
-        /**
-         * Extracts {@link PianoIdToken} from result {@link Intent}.
-         * Use it in {@link android.app.Activity#onActivityResult(int, int, Intent)}
-         *
-         * @param intent Intent, which you get
-         * @return {@link PianoIdToken} instance, if intent contains it
-         * @throws PianoIdException if intent contains authorization error
-         */
         @Suppress("unused") // Public API.
-        @Throws(PianoIdException::class, IllegalStateException::class)
         @JvmStatic
-        fun Intent?.getPianoIdTokenResult(): PianoIdToken? = getClient().getResult(this)
+        fun getUserInfo(
+            accessToken: String,
+            formName: String? = null,
+            callback: PianoIdFuncCallback<PianoUserProfile>
+        ) {
+            client?.getUserInfo(accessToken, formName, callback)
+                ?: callback(Result.failure(IllegalStateException(NOT_INITIALIZED_MSG)))
+        }
 
         @Suppress("unused") // Public API.
         @JvmStatic
@@ -117,7 +116,7 @@ class PianoId {
         @JvmStatic
         fun Uri?.isPianoIdUri(): Boolean =
             this?.run {
-                scheme?.toLowerCase(Locale.ENGLISH)?.startsWith(PianoIdClient.LINK_SCHEME_PREFIX) == true &&
+                scheme?.lowercase(Locale.ENGLISH)?.startsWith(PianoIdClient.LINK_SCHEME_PREFIX) == true &&
                     PianoIdClient.LINK_AUTHORITY.equals(authority, ignoreCase = true)
             } ?: false
 
@@ -143,6 +142,12 @@ class PianoId {
          */
         @Suppress("unused") // Public API.
         const val ENDPOINT_PRODUCTION_ASIA_PACIFIC = "https://buy-ap.piano.io"
+
+        /**
+         * Europe production endpoint
+         */
+        @Suppress("unused") // Public API.
+        const val ENDPOINT_PRODUCTION_EUROPE = "https://buy-eu.piano.io"
 
         /**
          * Sandbox endpoint
@@ -177,6 +182,7 @@ class PianoId {
         internal const val KEY_OAUTH_PROVIDER_NAME = "io.piano.android.id.OAUTH_PROVIDER_NAME"
         internal const val KEY_OAUTH_PROVIDER_TOKEN = "io.piano.android.id.OAUTH_PROVIDER_TOKEN"
         internal const val KEY_TOKEN = "io.piano.android.id.PianoIdActivity.TOKEN"
+        internal const val KEY_IS_NEW_USER = "io.piano.android.id.PianoIdActivity.IS_NEW_USER"
         internal const val KEY_ERROR = "io.piano.android.id.PianoIdActivity.ERROR"
         private const val NOT_INITIALIZED_MSG = "Piano ID SDK is not initialized! Make sure that you " +
             "initialize it via init()"

@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Build
 import androidx.annotation.RestrictTo
 import com.squareup.moshi.Moshi
-import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -16,45 +15,51 @@ import java.util.concurrent.TimeUnit
 internal class DependenciesProvider private constructor(
     context: Context,
     aid: String,
-    endpoint: String?,
-    interceptor: Interceptor? = null
+    endpoint: Composer.Endpoint
+//    interceptor: Interceptor? = null
 ) {
     private val prefsStorage = PrefsStorage(context)
-    private val userAgent = "Piano composer SDK (Android ${Build.VERSION.RELEASE} (Build ${Build.ID}); " +
-            "${context.applicationContext.deviceType()} ${Build.MANUFACTURER}/${Build.MODEL})"
+    private val userAgent = "Piano composer SDK ${BuildConfig.SDK_VERSION} (Android ${Build.VERSION.RELEASE} " +
+            "(Build ${Build.ID}); ${context.applicationContext.deviceType()} ${Build.MANUFACTURER}/${Build.MODEL})"
 
-    private val okHttpClientBuilder = OkHttpClient.Builder()
+    private val okHttpClient = OkHttpClient.Builder()
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(UserAgentInterceptor(userAgent))
         .addInterceptor(
             HttpLoggingInterceptor().setLevel(
-                if (BuildConfig.DEBUG)
+                if (BuildConfig.DEBUG || isLogHttpSet())
                     HttpLoggingInterceptor.Level.BODY
                 else HttpLoggingInterceptor.Level.NONE
             )
         )
-
-    private val okHttpClient = interceptor?.let {
-        okHttpClientBuilder
-            .addInterceptor(interceptor)
-            .build()
-    } ?: okHttpClientBuilder.build()
+        .build()
 
     private val moshi = Moshi.Builder()
-        .add(CustomParametersJsonAdapter.FACTORY)
+        .add(ComposerJsonAdapterFactory())
         .add(EventJsonAdapterFactory())
         .build()
 
-    private val api: Api = Retrofit.Builder()
-        .baseUrl(Composer.BASE_URL_SANDBOX)
+    private val moshiConverterFactory = MoshiConverterFactory.create(moshi)
+
+    private val composerApi: ComposerApi = Retrofit.Builder()
+        .baseUrl(endpoint.composerHost)
         .client(okHttpClient)
-        .addConverterFactory(MoshiConverterFactory.create(moshi))
-        .build().create()
+        .addConverterFactory(moshiConverterFactory)
+        .build()
+        .create()
+
+    private val generalApi: GeneralApi = Retrofit.Builder()
+        .baseUrl(endpoint.apiHost)
+        .client(okHttpClient)
+        .addConverterFactory(moshiConverterFactory)
+        .build()
+        .create()
 
     internal val composer: Composer = Composer(
-        api,
-        HttpHelper(ExperienceIdsProvider(prefsStorage), prefsStorage, moshi, userAgent),
+        composerApi,
+        generalApi,
+        HttpHelper(ExperienceIdsProvider(prefsStorage, PageViewIdProvider), prefsStorage, moshi, userAgent),
         prefsStorage,
         aid,
         endpoint
@@ -69,11 +74,11 @@ internal class DependenciesProvider private constructor(
         private var instance: DependenciesProvider? = null
 
         @JvmStatic
-        internal fun init(context: Context, aid: String, endpoint: String?, interceptor: Interceptor? = null) {
+        internal fun init(context: Context, aid: String, endpoint: Composer.Endpoint) {
             if (instance == null) {
                 synchronized(this) {
                     if (instance == null) {
-                        instance = DependenciesProvider(context, aid, endpoint, interceptor)
+                        instance = DependenciesProvider(context, aid, endpoint)//, interceptor)
                     }
                 }
             }

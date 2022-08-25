@@ -2,13 +2,12 @@ package io.piano.android.id
 
 import android.util.Base64
 import com.squareup.moshi.JsonAdapter
-import com.squareup.moshi.JsonAdapter.Factory
 import com.squareup.moshi.JsonReader
 import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import com.squareup.moshi.internal.Util
 import io.piano.android.id.models.PianoIdToken
-import io.piano.android.id.models.TokenData
 
 class PianoIdTokenJsonAdapter(
     moshi: Moshi
@@ -24,7 +23,15 @@ class PianoIdTokenJsonAdapter(
 
     private val longAdapter: JsonAdapter<Long> by lazy { moshi.adapter(Long::class.java) }
 
-    private val jwtAdapter: JsonAdapter<TokenData> by lazy { moshi.adapter(TokenData::class.java) }
+    private val jwtAdapter: JsonAdapter<Map<String, Any>> by lazy {
+        moshi.adapter(
+            Types.newParameterizedType(
+                Map::class.java,
+                String::class.java,
+                Any::class.java
+            )
+        )
+    }
 
     override fun fromJson(reader: JsonReader): PianoIdToken {
         var accessToken: String? = null
@@ -53,12 +60,13 @@ class PianoIdTokenJsonAdapter(
                 }
             }
             endObject()
+            val jwtFields = jwtAdapter.fromJson(
+                Base64.decode(accessToken!!.split("\\.".toRegex())[1], Base64.URL_SAFE).decodeToString()
+            )
             PianoIdToken(
                 accessToken ?: throw Util.missingProperty(ACCESS_TOKEN_CAMEL, ACCESS_TOKEN, reader),
                 refreshToken ?: "",
-                jwtAdapter.fromJson(
-                    Base64.decode(accessToken!!.split("\\.".toRegex())[1], Base64.URL_SAFE).decodeToString()
-                )?.exp ?: 0,
+                jwtFields ?: emptyMap()
             )
         }
     }
@@ -86,8 +94,11 @@ class PianoIdTokenJsonAdapter(
         private const val REFRESH_TOKEN_CAMEL = "refreshToken"
         private const val EXPIRES_IN_CAMEL = "expiresIn"
 
-        val FACTORY = Factory { type, _, moshi ->
-            takeIf { type == PianoIdToken::class.java }?.let { PianoIdTokenJsonAdapter(moshi) }
-        }
+        @JvmField
+        @Deprecated(
+            "Use PianoIdJsonAdapterFactory directly, will be removed in future versions",
+            ReplaceWith("PianoIdJsonAdapterFactory()")
+        )
+        val FACTORY = PianoIdJsonAdapterFactory()
     }
 }

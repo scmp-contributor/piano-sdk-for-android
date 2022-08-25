@@ -1,7 +1,9 @@
 package io.piano.android.id
 
 import io.piano.android.id.PianoIdClient.Companion.toPianoIdException
+import io.piano.android.id.models.PianoIdAuthResult
 
+typealias PianoIdAuthCallback = (PianoIdAuthResult) -> Unit
 typealias PianoIdFuncCallback<T> = (Result<T>) -> Unit
 
 /**
@@ -14,7 +16,6 @@ interface PianoIdCallback<T> {
      *
      * @param data result data
      */
-    @JvmDefault
     fun onSuccess(data: T) {
     }
 
@@ -22,7 +23,6 @@ interface PianoIdCallback<T> {
      * Called when operation has completed with error.
      * @param exception thrown exception
      */
-    @JvmDefault
     fun onFailure(exception: PianoIdException) {
     }
 
