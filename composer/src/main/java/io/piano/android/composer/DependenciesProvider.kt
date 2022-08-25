@@ -19,7 +19,7 @@ internal class DependenciesProvider private constructor(
 ) {
     private val prefsStorage = PrefsStorage(context)
     private val userAgent = "Piano composer SDK ${BuildConfig.SDK_VERSION} (Android ${Build.VERSION.RELEASE} " +
-        "(Build ${Build.ID}); ${context.applicationContext.deviceType()} ${Build.MANUFACTURER}/${Build.MODEL})"
+            "(Build ${Build.ID}); ${context.applicationContext.deviceType()} ${Build.MANUFACTURER}/${Build.MODEL})"
 
     private val okHttpClient = OkHttpClient.Builder()
         .readTimeout(30, TimeUnit.SECONDS)
@@ -33,6 +33,7 @@ internal class DependenciesProvider private constructor(
             )
         )
         .build()
+
     private val moshi = Moshi.Builder()
         .add(ComposerJsonAdapterFactory())
         .add(EventJsonAdapterFactory())
@@ -76,7 +77,7 @@ internal class DependenciesProvider private constructor(
             if (instance == null) {
                 synchronized(this) {
                     if (instance == null) {
-                        instance = DependenciesProvider(context, aid, endpoint)
+                        instance = DependenciesProvider(context, aid, endpoint)//, interceptor)
                     }
                 }
             }
