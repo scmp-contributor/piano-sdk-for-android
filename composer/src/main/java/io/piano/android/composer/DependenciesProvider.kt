@@ -16,7 +16,6 @@ internal class DependenciesProvider private constructor(
     context: Context,
     aid: String,
     endpoint: Composer.Endpoint
-//    interceptor: Interceptor? = null
 ) {
     private val prefsStorage = PrefsStorage(context)
     private val userAgent = "Piano composer SDK ${BuildConfig.SDK_VERSION} (Android ${Build.VERSION.RELEASE} " +

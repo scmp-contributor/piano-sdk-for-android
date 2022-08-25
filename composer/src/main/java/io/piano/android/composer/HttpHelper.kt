@@ -78,7 +78,7 @@ internal class HttpHelper(
             ).filterNotEmptyValues()
         }.toMap()
 
-    override fun afterExecute(request: ExperienceRequest, response: ExperienceResponse) =
+    override fun afterExecute(request: ExperienceRequest, response: ExperienceResponse, serverTimeMilli: Long?) =
         with(response) {
             prefsStorage.xbuilderBrowserCookie = xbCookie?.value.orEmpty()
             prefsStorage.tpBrowserCookie = tbCookie?.value.orEmpty()

@@ -10,7 +10,6 @@ import io.piano.android.composer.model.ExperienceResponse
 import io.piano.android.composer.model.events.EventType
 import io.piano.android.composer.model.events.ShowTemplate
 import okhttp3.HttpUrl
-import okhttp3.Interceptor
 import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
@@ -99,7 +98,8 @@ class Composer internal constructor(
                                 request,
                                 data,
                                 eventTypeListeners,
-                                exceptionListener
+                                exceptionListener,
+                                response.headers().getDate("date")?.time // return the server of response
                             )
                         }
                     }.onFailure {
@@ -153,9 +153,10 @@ class Composer internal constructor(
         request: ExperienceRequest,
         response: ExperienceResponse,
         eventTypeListeners: Collection<EventTypeListener<out EventType>>,
-        exceptionListener: ExceptionListener
+        exceptionListener: ExceptionListener,
+        serverTimeMilli: Long? = null
     ) {
-        experienceInterceptors.forEach { it.afterExecute(request, response) }
+        experienceInterceptors.forEach { it.afterExecute(request, response, serverTimeMilli = serverTimeMilli) }
 
         // Don't process any custom logic if there's no listeners
         if (eventTypeListeners.isEmpty())

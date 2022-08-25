@@ -22,7 +22,7 @@ class C1xInterceptor(
         }
     }
 
-    override fun afterExecute(request: ExperienceRequest, response: ExperienceResponse) {
+    override fun afterExecute(request: ExperienceRequest, response: ExperienceResponse, serverTimeMilli: Long?) {
         response.apply {
             if (cxenseCustomerPrefix == null) {
                 Timber.w("C1X hasn't configured")
